@@ -1,0 +1,232 @@
+
+openapi: 3.0.0
+info:
+  title: API Системы прогнозирования закупок
+  description: API для взаимодействия с системой прогнозирования закупок, позволяющий получать прогнозы и регистрировать новые продажи.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Локальный сервер разработки.
+components:
+  schemas:
+    ProductForecast:
+      type: object
+      description: Прогнозные метрики для одного товара.
+      required:
+        - product_sku
+        - forecast_date
+        - predicted_sales
+      properties:
+        product_sku:
+          type: string
+          description: Уникальный код товара (SKU).
+          example: "PRD-2024-001"
+        forecast_date:
+          type: string
+          format: date
+          description: Дата, к которой относится прогноз.
+          example: "2025-07-01"
+        predicted_sales:
+          type: integer
+          description: Прогнозируемые продажи на указанную дату.
+          example: 120
+        confidence_interval_low:
+          type: integer
+          description: Нижняя граница доверительного интервала прогноза.
+          example: 100
+        confidence_interval_high:
+          type: integer
+          description: Верхняя граница доверительного интервала прогноза.
+          example: 140
+    SaleInput:
+      type: object
+      description: Данные о новой продаже для регистрации.
+      required:
+        - product_id
+        - quantity
+        - price
+      properties:
+        product_id:
+          type: string
+          description: Уникальный идентификатор товара.
+          example: "ABC-123-XYZ"
+        quantity:
+          type: integer
+          description: Количество проданного товара.
+          minimum: 1
+          example: 5
+        price:
+          type: number
+          format: float
+          description: Цена единицы проданного товара.
+          minimum: 0
+          example: 99.99
+    ErrorResponse:
+      type: object
+      description: Стандартизированный формат ответа при возникновении ошибки.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          description: HTTP-статус код ошибки.
+          example: 404
+        message:
+          type: string
+          description: Детальное сообщение об ошибке.
+          example: "Товар с SKU 'NON_EXISTENT_SKU' не найден."
+paths:
+  /forecasts:
+    get:
+      summary: Возвращает список всех товаров с их прогнозными метриками. 
+      description: Использует данные из представления full_forecast (SQL-представление) для получения текущих прогнозных данных по всем товарам.
+      operationId: getForecasts 
+      tags: 
+        - Прогнозы
+      responses:
+        '200':
+          description: Успешный запрос, возвращает список прогнозов.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductForecast'
+              examples:
+                successfulResponse:
+                  summary: Пример успешного ответа со списком прогнозов
+                  value:
+                    - product_sku: "PRD-2024-001"
+                      forecast_date: "2025-07-01"
+                      predicted_sales: 120
+                      confidence_interval_low: 100
+                      confidence_interval_high: 140
+                    - product_sku: "PRD-2024-002"
+                      forecast_date: "2025-07-01"
+                      predicted_sales: 75
+                      confidence_interval_low: 60
+                      confidence_interval_high: 90
+        '500':
+          description: Внутренняя ошибка сервера.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse' 
+              examples:
+                internalError:
+                  summary: Пример ошибки сервера
+                  value:
+                    code: 500
+                    message: "Не удалось получить прогнозы из базы данных."
+  /forecasts/{product_sku}:
+    get:
+      summary: Возвращает прогнозные метрики для конкретного товара по его SKU.
+      description: Получает прогнозные данные для указанного SKU из представления full_forecast.
+      operationId: getForecastBySku
+      tags:
+        - Прогнозы
+      parameters:
+        - name: product_sku
+          in: path
+          required: true
+          description: Уникальный код товара (SKU).
+          schema:
+            type: string
+            example: "PRD-2024-001"
+      responses:
+        '200':
+          description: Успешный запрос, возвращает прогноз для указанного SKU.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductForecast'
+              examples:
+                successfulResponse:
+                  summary: Пример успешного ответа для одного SKU
+                  value:
+                    product_sku: "PRD-2024-001"
+                    forecast_date: "2025-07-01"
+                    predicted_sales: 120
+                    confidence_interval_low: 100
+                    confidence_interval_high: 140
+        '404':
+          description: Товар с указанным SKU не найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notFound:
+                  summary: Пример ошибки "Товар не найден"
+                  value:
+                    code: 404
+                    message: "Товар с SKU 'NON_EXISTENT_SKU' не найден."
+        '500':
+          description: Внутренняя ошибка сервера.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internalError:
+                  summary: Пример ошибки сервера
+                  value:
+                    code: 500
+                    message: "Не удалось получить прогноз из базы данных для SKU 'PRD-2024-001'."
+  /sales:
+    post:
+      summary: Регистрирует данные о новой продаже.
+      description: Принимает данные о новой продаже (ID товара, количество, цена) и записывает их в таблицу sales (в базе данных).
+      operationId: createSale
+      tags:
+        - Продажи
+      requestBody:
+        description: Данные новой продажи в формате JSON.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleInput'
+            examples:
+              newSaleExample:
+                summary: Пример тела запроса для новой продажи
+                value:
+                  product_id: "ABC-123-XYZ"
+                  quantity: 5
+                  price: 99.99
+      responses:
+        '201':
+          description: Продажа успешно зарегистрирована.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Продажа успешно зарегистрирована."
+        '400':
+          description: Неверные входные данные.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidInput:
+                  summary: Пример ошибки валидации
+                  value:
+                    code: 400
+                    message: "Неверные входные данные: количество должно быть больше 0."
+        '500':
+          description: Внутренняя ошибка сервера.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internalError:
+                  summary: Пример ошибки сервера
+                  value:
+                    code: 500
+                    message: "Не удалось зарегистрировать продажу в базе данных."
