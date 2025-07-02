@@ -42,7 +42,7 @@ CREATE TABLE product_inventory (
     warehouse_id INT NOT NULL,
     quantity INT NOT NULL CHECK (quantity >= 0),
     last_updated TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (product_id_pi, warehouse_id), -- Composite Primary Key
+    PRIMARY KEY (product_id_pi, warehouse_id),
     FOREIGN KEY (product_id_pi) REFERENCES products(id),
     FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
 );
